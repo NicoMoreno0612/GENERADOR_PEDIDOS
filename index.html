@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Generador de Pedidos Comerciales</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #062c2c;
+      color: #f2f2f2;
+    }
+    header {
+      background: url('https://straumann.scene7.com/is/image/straumann/sailing-banner') no-repeat center center/cover;
+      padding: 40px 20px;
+      text-align: center;
+      color: white;
+    }
+    header img {
+      height: 50px;
+      margin-bottom: 10px;
+    }
+    h2 {
+      margin: 0;
+      font-size: 2em;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      padding: 20px;
+    }
+    label {
+      font-weight: bold;
+      margin-top: 15px;
+      display: block;
+    }
+    input, select, textarea, button {
+      padding: 10px;
+      margin: 5px 0 15px;
+      width: 100%;
+      border: none;
+      border-radius: 5px;
+      font-size: 1em;
+    }
+    input, select, textarea {
+      background-color: #0b3b3b;
+      color: #f2f2f2;
+    }
+    button {
+      background-color: #00ad7c;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #009c70;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: #0b3b3b;
+    }
+    th, td {
+      padding: 10px;
+      text-align: center;
+      border-bottom: 1px solid #144646;
+    }
+    .btn-copiar {
+      background-color: #005244;
+    }
+    .hidden { display: none; }
+    .preview-box {
+      background-color: #0d4040;
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <img src="https://upload.wikimedia.org/wikipedia/commons/1/17/Straumann_Logo.png" alt="Straumann Logo">
+  <h2>Generador de Pedidos Comerciales</h2>
+</header>
+
+<div class="container">
+  <label>Nombre del Cliente:</label>
+  <input type="text" id="nombreCliente" placeholder="Ej: Clínica OdontoFull" required>
+
+  <label>Número del Cliente:</label>
+  <input type="text" id="numeroCliente" placeholder="Ej: 12345678" required>
+
+  <label>Tipo de Pedido:</label>
+  <select id="tipoPedido">
+    <option value="">Selecciona</option>
+    <option value="FACTURADO">FACTURADO</option>
+    <option value="REMISIÓN">REMISIÓN</option>
+    <option value="KB">KB</option>
+  </select>
+
+  <h3>Referencias</h3>
+  <button onclick="agregarFila()">+ Agregar Referencia</button>
+  <table id="tablaReferencias">
+    <thead>
+      <tr><th>Referencia</th><th>Cantidad</th><th>Eliminar</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="seccionObservaciones" class="hidden">
+    <label>Observaciones del Pedido:</label>
+    <textarea id="observaciones" rows="4" placeholder="Escribe aquí cualquier comentario adicional..."></textarea>
+  </div>
+
+  <button onclick="generarPedido()">Generar Excel y Vista previa del Correo</button>
+
+  <div id="resultado" class="hidden preview-box">
+    <label><strong>Asunto sugerido:</strong></label>
+    <input type="text" id="asuntoCorreo" readonly />
+
+    <p><strong>Tipo de Pedido:</strong> <span id="tipoPedidoCorreo"></span></p>
+    <p><strong>Observaciones:</strong></p>
+    <textarea id="cuerpoCorreo" rows="6"></textarea>
+    <button class="btn-copiar" onclick="copiarCorreo()">📋 Copiar cuerpo del correo</button>
+
+    <div id="archivoDescarga">
+      <p>📎 Archivo descargado automáticamente. Puedes volver a descargarlo:</p>
+      <a id="linkExcel" href="#" download target="_blank">📁 Descargar archivo del pedido (.xlsx)</a><br>
+    </div>
+  </div>
+</div>
+
+<script>
+  let excelBlobURL = '';
+
+  function agregarFila() {
+    const tabla = document.querySelector("#tablaReferencias tbody");
+    const fila = tabla.insertRow();
+    fila.insertCell(0).innerHTML = `<input type="text" placeholder="Ej: 108.234" required>`;
+    fila.insertCell(1).innerHTML = `<input type="number" min="1" required>`;
+    fila.insertCell(2).innerHTML = `<button onclick="eliminarFila(this)">🗑️</button>`;
+    mostrarObservaciones();
+  }
+
+  function eliminarFila(btn) {
+    const fila = btn.parentElement.parentElement;
+    fila.remove();
+    mostrarObservaciones();
+  }
+
+  function mostrarObservaciones() {
+    const tieneReferencias = document.querySelector("#tablaReferencias tbody").rows.length > 0;
+    document.getElementById("seccionObservaciones").classList.toggle("hidden", !tieneReferencias);
+  }
+
+  function generarPedido() {
+    const nombre = document.getElementById("nombreCliente").value.trim();
+    const numero = document.getElementById("numeroCliente").value.trim();
+    const tipo = document.getElementById("tipoPedido").value;
+    const obs = document.getElementById("observaciones").value.trim();
+    const filas = document.querySelectorAll("#tablaReferencias tbody tr");
+
+    if (!nombre || !numero || !tipo || filas.length === 0) {
+      alert("Por favor completa todos los campos obligatorios y al menos una referencia.");
+      return;
+    }
+
+    const data = [];
+    filas.forEach(fila => {
+      const ref = fila.cells[0].querySelector("input").value.trim();
+      const cant = fila.cells[1].querySelector("input").value.trim();
+      if (ref && cant) {
+        data.push({ Referencia: ref, Cantidad: parseInt(cant) });
+      }
+    });
+
+    const ahora = new Date();
+    const hh = String(ahora.getHours()).padStart(2, '0');
+    const mm = String(ahora.getMinutes()).padStart(2, '0');
+    const hora = `${hh}${mm}`;
+    const nombreLimpio = nombre.replace(/\s+/g, '').replace(/[^\w]/g, '');
+    const nombreArchivo = `PEDIDO_${nombreLimpio}_${numero}_${hora}.xlsx`;
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pedido");
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: "application/octet-stream" });
+
+    if (excelBlobURL) URL.revokeObjectURL(excelBlobURL);
+    excelBlobURL = URL.createObjectURL(blob);
+
+    const link = document.getElementById("linkExcel");
+    link.href = excelBlobURL;
+    link.download = nombreArchivo;
+
+    const autoLink = document.createElement("a");
+    autoLink.href = excelBlobURL;
+    autoLink.download = nombreArchivo;
+    autoLink.click();
+
+    document.getElementById("asuntoCorreo").value = `Pedido – ${nombre} – ${numero}`;
+    document.getElementById("tipoPedidoCorreo").textContent = tipo;
+    document.getElementById("cuerpoCorreo").value = `TIPO DE PEDIDO: ${tipo}\n\nOBSERVACIONES:\n${obs || '(Sin observaciones)'}`;
+    document.getElementById("resultado").classList.remove("hidden");
+  }
+
+  function copiarCorreo() {
+    const text = document.getElementById("cuerpoCorreo").value;
+    navigator.clipboard.writeText(text);
+    alert("Cuerpo del correo copiado.");
+  }
+</script>
+
+</body>
+</html>
