@@ -94,18 +94,19 @@
   <input type="text" id="numeroCliente" placeholder="Ej: 12345678" required>
 
   <label>Tipo de Pedido:</label>
-  <select id="tipoPedido">
+  <select id="tipoPedido" onchange="mostrarObservaciones()">
     <option value="">Selecciona</option>
     <option value="FACTURADO">FACTURADO</option>
     <option value="REMISIÓN">REMISIÓN</option>
     <option value="KB">KB</option>
+    <option value="KE">KE</option>
   </select>
 
   <h3>Referencias</h3>
   <button onclick="agregarFila()">+ Agregar Referencia</button>
   <table id="tablaReferencias">
     <thead>
-      <tr><th>Referencia</th><th>Cantidad</th><th>Eliminar</th></tr>
+      <tr><th>Referencia</th><th>Cantidad</th><th class="loteHeader hidden">Lote</th><th>Eliminar</th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -138,10 +139,20 @@
 
   function agregarFila() {
     const tabla = document.querySelector("#tablaReferencias tbody");
+    const tipo = document.getElementById("tipoPedido").value;
     const fila = tabla.insertRow();
+
     fila.insertCell(0).innerHTML = `<input type="text" placeholder="Ej: 108.234" required>`;
     fila.insertCell(1).innerHTML = `<input type="number" min="1" required>`;
-    fila.insertCell(2).innerHTML = `<button onclick="eliminarFila(this)">🗑️</button>`;
+
+    if (tipo === "KE") {
+      document.querySelectorAll('.loteHeader').forEach(th => th.classList.remove('hidden'));
+      fila.insertCell(2).innerHTML = `<input type="text" placeholder="Ej: L20240501">`;
+    } else {
+      fila.insertCell(2);
+    }
+
+    fila.insertCell(3).innerHTML = `<button onclick="eliminarFila(this)">🗑️</button>`;
     mostrarObservaciones();
   }
 
@@ -168,12 +179,25 @@
       return;
     }
 
+    const encabezado = tipo === "KE"
+      ? ["Referencia", "Cantidad", "Lote"]
+      : ["Referencia", "Cantidad"];
+
     const data = [];
+    data.push(["Nombre del Cliente", nombre]);
+    data.push(["Código del Cliente", numero]);
+    data.push(["Tipo de Pedido", tipo]);
+    data.push([""]); // espacio
+    data.push(encabezado);
+
     filas.forEach(fila => {
       const ref = fila.cells[0].querySelector("input").value.trim();
       const cant = fila.cells[1].querySelector("input").value.trim();
-      if (ref && cant) {
-        data.push({ Referencia: ref, Cantidad: parseInt(cant) });
+      if (tipo === "KE") {
+        const lote = fila.cells[2].querySelector("input").value.trim();
+        data.push([ref, parseInt(cant), lote]);
+      } else {
+        data.push([ref, parseInt(cant)]);
       }
     });
 
@@ -184,7 +208,7 @@
     const nombreLimpio = nombre.replace(/\s+/g, '').replace(/[^\w]/g, '');
     const nombreArchivo = `PEDIDO_${nombreLimpio}_${numero}_${hora}.xlsx`;
 
-    const ws = XLSX.utils.json_to_sheet(data);
+    const ws = XLSX.utils.aoa_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Pedido");
     const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -217,6 +241,3 @@
 
 </body>
 </html>
-
-
-
