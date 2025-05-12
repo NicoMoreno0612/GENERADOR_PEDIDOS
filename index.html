@@ -67,15 +67,19 @@
       text-align: center;
       border-bottom: 1px solid #144646;
     }
-    .btn-copiar {
-      background-color: #005244;
-    }
     .hidden { display: none; }
     .preview-box {
       background-color: #0d4040;
       border-radius: 10px;
       padding: 20px;
       margin-top: 20px;
+    }
+    footer {
+      text-align: center;
+      padding: 10px;
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 40px;
     }
   </style>
 </head>
@@ -96,17 +100,24 @@
   <label>Tipo de Pedido:</label>
   <select id="tipoPedido" onchange="mostrarObservaciones()">
     <option value="">Selecciona</option>
-    <option value="FACTURADO">FACTURADO</option>
-    <option value="REMISIÓN">REMISIÓN</option>
-    <option value="KB">KB</option>
-    <option value="KE">KE</option>
+    <option value="FACTURADO">PEDIDO FACTURADO</option>
+    <option value="REMISIÓN">PEDIDO EN REMISIÓN</option>
+    <option value="KB">PEDIDO DE STOCK</option>
+    <option value="KE">FACTURACIÓN DE PEDIDO EN ABASTECIMIENTO</option>
+    <option value="CAMBIO">CAMBIO DE PRODUCTO</option>
   </select>
 
   <h3>Referencias</h3>
   <button onclick="agregarFila()">+ Agregar Referencia</button>
   <table id="tablaReferencias">
     <thead>
-      <tr><th>Referencia</th><th>Cantidad</th><th class="loteHeader hidden">Lote</th><th>Eliminar</th></tr>
+      <tr>
+        <th>Referencia</th>
+        <th>Cantidad</th>
+        <th class="loteHeader hidden">Lote</th>
+        <th class="cambioHeader hidden">Referencia Necesitada</th>
+        <th>Eliminar</th>
+      </tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -116,23 +127,18 @@
     <textarea id="observaciones" rows="4" placeholder="Escribe aquí cualquier comentario adicional..."></textarea>
   </div>
 
-  <button onclick="generarPedido()">Generar Excel y Vista previa del Correo</button>
+  <button onclick="generarPedido()">Generar Excel</button>
 
   <div id="resultado" class="hidden preview-box">
-    <label><strong>Asunto sugerido:</strong></label>
-    <input type="text" id="asuntoCorreo" readonly />
-
-    <p><strong>Tipo de Pedido:</strong> <span id="tipoPedidoCorreo"></span></p>
-    <p><strong>Observaciones:</strong></p>
-    <textarea id="cuerpoCorreo" rows="6"></textarea>
-    <button class="btn-copiar" onclick="copiarCorreo()">📋 Copiar cuerpo del correo</button>
-
-    <div id="archivoDescarga">
-      <p>📎 Archivo descargado automáticamente. Puedes volver a descargarlo:</p>
-      <a id="linkExcel" href="#" download target="_blank">📁 Descargar archivo del pedido (.xlsx)</a><br>
-    </div>
+    <p><strong>Archivo generado:</strong></p>
+    <a id="linkExcel" href="#" download target="_blank">📁 Descargar archivo del pedido (.xlsx)</a><br>
+    <small><i>Busca el archivo en tu carpeta de Descargas y súbelo a Monday.</i></small>
   </div>
 </div>
+
+<footer>
+  Hecho con 💻 y mucho amor por Nicolás Moreno · 2025
+</footer>
 
 <script>
   let excelBlobURL = '';
@@ -145,14 +151,21 @@
     fila.insertCell(0).innerHTML = `<input type="text" placeholder="Ej: 108.234" required>`;
     fila.insertCell(1).innerHTML = `<input type="number" min="1" required>`;
 
-    if (tipo === "KE") {
+    if (tipo === "KE" || tipo === "CAMBIO") {
       document.querySelectorAll('.loteHeader').forEach(th => th.classList.remove('hidden'));
       fila.insertCell(2).innerHTML = `<input type="text" placeholder="Ej: L20240501">`;
     } else {
       fila.insertCell(2);
     }
 
-    fila.insertCell(3).innerHTML = `<button onclick="eliminarFila(this)">🗑️</button>`;
+    if (tipo === "CAMBIO") {
+      document.querySelectorAll('.cambioHeader').forEach(th => th.classList.remove('hidden'));
+      fila.insertCell(3).innerHTML = `<input type="text" placeholder="Referencia Necesitada">`;
+    } else {
+      fila.insertCell(3);
+    }
+
+    fila.insertCell(4).innerHTML = `<button onclick="eliminarFila(this)">🗑️</button>`;
     mostrarObservaciones();
   }
 
@@ -179,34 +192,45 @@
       return;
     }
 
-    const encabezado = tipo === "KE"
-      ? ["Referencia", "Cantidad", "Lote"]
-      : ["Referencia", "Cantidad"];
+    const encabezado = ["Referencia", "Cantidad"];
+    if (tipo === "KE" || tipo === "CAMBIO") encabezado.push("Lote");
+    if (tipo === "CAMBIO") encabezado.push("Referencia Necesitada");
 
     const data = [];
     data.push(["Nombre del Cliente", nombre]);
     data.push(["Código del Cliente", numero]);
     data.push(["Tipo de Pedido", tipo]);
-    data.push([""]); // espacio
+    data.push(["Observaciones", obs || '(Sin observaciones)']);
+    data.push([""]);
     data.push(encabezado);
 
     filas.forEach(fila => {
       const ref = fila.cells[0].querySelector("input").value.trim();
       const cant = fila.cells[1].querySelector("input").value.trim();
-      if (tipo === "KE") {
-        const lote = fila.cells[2].querySelector("input").value.trim();
-        data.push([ref, parseInt(cant), lote]);
-      } else {
-        data.push([ref, parseInt(cant)]);
+      const filaData = [ref, parseInt(cant)];
+
+      if (tipo === "KE" || tipo === "CAMBIO") {
+        const lote = fila.cells[2].querySelector("input")?.value.trim() || "";
+        filaData.push(lote);
       }
+
+      if (tipo === "CAMBIO") {
+        const nuevaRef = fila.cells[3].querySelector("input")?.value.trim() || "";
+        filaData.push(nuevaRef);
+      }
+
+      data.push(filaData);
     });
+
+    data.push([""]);
+    data.push(["Desarrollado por Nicolás Moreno – Automatización y eficiencia en pedidos"]);
 
     const ahora = new Date();
     const hh = String(ahora.getHours()).padStart(2, '0');
     const mm = String(ahora.getMinutes()).padStart(2, '0');
     const hora = `${hh}${mm}`;
     const nombreLimpio = nombre.replace(/\s+/g, '').replace(/[^\w]/g, '');
-    const nombreArchivo = `PEDIDO_${nombreLimpio}_${numero}_${hora}.xlsx`;
+    const nombreArchivo = `PEDIDO_${nombreLimpio}_${numero}_${hora}_NM.xlsx`;
 
     const ws = XLSX.utils.aoa_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -220,22 +244,7 @@
     const link = document.getElementById("linkExcel");
     link.href = excelBlobURL;
     link.download = nombreArchivo;
-
-    const autoLink = document.createElement("a");
-    autoLink.href = excelBlobURL;
-    autoLink.download = nombreArchivo;
-    autoLink.click();
-
-    document.getElementById("asuntoCorreo").value = `Pedido – ${nombre} – ${numero}`;
-    document.getElementById("tipoPedidoCorreo").textContent = tipo;
-    document.getElementById("cuerpoCorreo").value = `TIPO DE PEDIDO: ${tipo}\n\nOBSERVACIONES:\n${obs || '(Sin observaciones)'}`;
     document.getElementById("resultado").classList.remove("hidden");
-  }
-
-  function copiarCorreo() {
-    const text = document.getElementById("cuerpoCorreo").value;
-    navigator.clipboard.writeText(text);
-    alert("Cuerpo del correo copiado.");
   }
 </script>
 
